@@ -38,7 +38,7 @@ def set_up_data(H):
         shift_loss = -0.5
         scale_loss = 2.0
     elif H.dataset == 'cifar10':
-        (trX, _), (vaX, _), (teX, _) = cifar10(H.data_root, one_hot=False)
+        (trX, _), (vaX, _), (teX, _) = cifar10(H.data_root, one_hot=False)  # the labels are not used;
         H.image_size = 32
         H.image_channels = 3
         shift = -120.63838
@@ -144,7 +144,7 @@ def ffhq256(data_root):
 
 def cifar10(data_root, one_hot=True):
     tr_data = [unpickle_cifar10(os.path.join(data_root, 'cifar-10-batches-py/', 'data_batch_%d' % i)) for i in range(1, 6)]
-    trX = np.vstack(data['data'] for data in tr_data)
+    trX = np.vstack([data['data'] for data in tr_data])
     trY = np.asarray(flatten([data['labels'] for data in tr_data]))
     te_data = unpickle_cifar10(os.path.join(data_root, 'cifar-10-batches-py/', 'test_batch'))
     teX = np.asarray(te_data['data'])

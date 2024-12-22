@@ -91,7 +91,8 @@ HPARAMS_REGISTRY['ffhq1024'] = ffhq1024
 
 
 def parse_args_and_update_hparams(H, parser, s=None):
-    args = parser.parse_args(s)
+    args, unknown = parser.parse_known_args()
+    # args = parser.parse_args(s)
     valid_args = set(args.__dict__.keys())
     hparam_sets = [x for x in args.hparam_sets.split(',') if x]
     for hp_set in hparam_sets:
@@ -100,7 +101,9 @@ def parse_args_and_update_hparams(H, parser, s=None):
             if k not in valid_args:
                 raise ValueError(f"{k} not in default args")
         parser.set_defaults(**hps)
-    H.update(parser.parse_args(s).__dict__)
+    
+    args, unknown = parser.parse_known_args()
+    H.update(args.__dict__)
 
 
 def add_vae_arguments(parser):
@@ -110,7 +113,7 @@ def add_vae_arguments(parser):
     parser.add_argument('--data_root', type=str, default='./')
 
     parser.add_argument('--desc', type=str, default='test')
-    parser.add_argument('--hparam_sets', '--hps', type=str)
+    parser.add_argument('--hparam_sets', '--hps', type=str, default='cifar10')
     parser.add_argument('--restore_path', type=str, default=None)
     parser.add_argument('--restore_ema_path', type=str, default=None)
     parser.add_argument('--restore_log_path', type=str, default=None)

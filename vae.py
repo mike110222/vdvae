@@ -103,10 +103,15 @@ class DecBlock(nn.Module):
         use_3x3 = res > 2
         cond_width = int(width * H.bottleneck_multiple)
         self.zdim = H.zdim
-        self.enc = Block(width * 2, cond_width, H.zdim * 2, residual=False, use_3x3=use_3x3)
-        self.prior = Block(width, cond_width, H.zdim * 2 + width, residual=False, use_3x3=use_3x3, zero_last=True)
-        self.z_proj = get_1x1(H.zdim, width)
+
+        # the posterior q(zₙ|z<n,x);
+        self.enc = Block(width * 2, cond_width, H.zdim * 2, residual=False, use_3x3=use_3x3)    
+        # the generative prior p(zₙ|z<n) and the change/residual to the input;
+        self.prior = Block(width, cond_width, H.zdim * 2 + width, residual=False, use_3x3=use_3x3, zero_last=True)  
+        # the latent z's dim=16, <input dim=# channels=384, all z-values need to be projected to this 384-D vector;
+        self.z_proj = get_1x1(H.zdim, width)            
         self.z_proj.weight.data *= np.sqrt(1 / n_blocks)
+        
         self.resnet = Block(width, cond_width, width, residual=True, use_3x3=use_3x3)
         self.resnet.c4.weight.data *= np.sqrt(1 / n_blocks)
         self.z_fn = lambda x: self.z_proj(x)
@@ -115,8 +120,8 @@ class DecBlock(nn.Module):
         qm, qv = self.enc(torch.cat([x, acts], dim=1)).chunk(2, dim=1)
         feats = self.prior(x)
         pm, pv, xpp = feats[:, :self.zdim, ...], feats[:, self.zdim:self.zdim * 2, ...], feats[:, self.zdim * 2:, ...]
-        x = x + xpp
-        z = draw_gaussian_diag_samples(qm, qv)
+        x = x + xpp # the prior block is done without residual, so this adds the residual;
+        z = draw_gaussian_diag_samples(qm, qv)  # the number of latents is z_dim×width×height, so for bottom layers, with 32×32 res, the nubmer of dim(z) is very high, =16×32×32;
         kl = gaussian_analytical_kl(qm, pm, qv, pv)
         return z, x, kl
 
@@ -148,11 +153,11 @@ class DecBlock(nn.Module):
         if self.mixin is not None:
             x = x + F.interpolate(xs[self.mixin][:, :x.shape[1], ...], scale_factor=self.base // self.mixin)
         z, x, kl = self.sample(x, acts)
-        x = x + self.z_fn(z)
-        x = self.resnet(x)
+        x = x + self.z_fn(z)    #!!!why, add the posterior? I think there's a mistake here, the stochasticity should be added from the prior z~p(zₙ|z_<n) not the projected posterior, so should sample another latent z from the prior, z = draw_gaussian_diag_samples(pm, pv) in self.sample;
+        x = self.resnet(x)  # is another resent block really necessary??, since in self.sample, already has x=x+xpp;
         xs[self.base] = x
         if get_latents:
-            return xs, dict(z=z.detach(), kl=kl)
+            return xs, dict(z=z.detach(), kl=kl)    # new tensor detached from z, without gradient computation;
         return xs, dict(kl=kl)
 
     def forward_uncond(self, xs, t=None, lvs=None):
@@ -191,7 +196,7 @@ class Decoder(HModule):
 
     def forward(self, activations, get_latents=False):
         stats = []
-        xs = {a.shape[2]: a for a in self.bias_xs}
+        xs = {a.shape[2]: a for a in self.bias_xs}  #xs represents the prior latent z~p(zₙ|z_<n)'s activations, xs stores the activations along the top-down layers at the end of each resolution stack, so at the end of all width×height=1×1, 4×4, 8×8 etc. layers;
         for block in self.dec_blocks:
             xs, block_stats = block(xs, activations, get_latents=get_latents)
             stats.append(block_stats)
@@ -229,7 +234,7 @@ class VAE(HModule):
     def forward(self, x, x_target):
         activations = self.encoder.forward(x)
         px_z, stats = self.decoder.forward(activations)
-        distortion_per_pixel = self.decoder.out_net.nll(px_z, x_target)
+        distortion_per_pixel = self.decoder.out_net.nll(px_z, x_target) # distortion=E[log(p(x|z)0], rate=D_KL term in ELBO; ELBO=distortion + rate;
         rate_per_pixel = torch.zeros_like(distortion_per_pixel)
         ndims = np.prod(x.shape[1:])
         for statdict in stats:

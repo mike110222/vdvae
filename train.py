@@ -16,7 +16,7 @@ def training_step(H, data_input, target, vae, ema_vae, optimizer, iterate):
     stats = vae.forward(data_input, target)
     stats['elbo'].backward()
     grad_norm = torch.nn.utils.clip_grad_norm_(vae.parameters(), H.grad_clip).item()
-    distortion_nans = torch.isnan(stats['distortion']).sum()
+    distortion_nans = torch.isnan(stats['distortion']).sum()    # Checks for NaN (Not a Number) values in distortion and rate metrics to detect numerical instability.
     rate_nans = torch.isnan(stats['rate']).sum()
     stats.update(dict(rate_nans=0 if rate_nans == 0 else 1, distortion_nans=0 if distortion_nans == 0 else 1))
     stats = get_cpu_stats_over_ranks(stats)
@@ -49,7 +49,7 @@ def get_sample_for_visualization(data, preprocess_fn, num, dataset):
 
 
 def train_loop(H, data_train, data_valid, preprocess_fn, vae, ema_vae, logprint):
-    optimizer, scheduler, cur_eval_loss, iterate, starting_epoch = load_opt(H, vae, logprint)
+    optimizer, scheduler, cur_eval_loss, iterate, starting_epoch = load_opt(H, vae, logprint) # optimizer is already wrapped by the scheduler in load_opt, in later code, only need to take scheduler.step();
     train_sampler = DistributedSampler(data_train, num_replicas=H.mpi_size, rank=H.rank)
     viz_batch_original, viz_batch_processed = get_sample_for_visualization(data_valid, preprocess_fn, H.num_images_visualize, H.dataset)
     early_evals = set([1] + [2 ** exp for exp in range(3, 14)])
@@ -59,7 +59,7 @@ def train_loop(H, data_train, data_valid, preprocess_fn, vae, ema_vae, logprint)
     for epoch in range(starting_epoch, H.num_epochs):
         train_sampler.set_epoch(epoch)
         for x in DataLoader(data_train, batch_size=H.n_batch, drop_last=True, pin_memory=True, sampler=train_sampler):
-            data_input, target = preprocess_fn(x)
+            data_input, target = preprocess_fn(x)   # target is the preprocessed image after adding shift and scale, not the labels, which have already been discarded;
             training_stats = training_step(H, data_input, target, vae, ema_vae, optimizer, iterate)
             stats.append(training_stats)
             scheduler.step()
@@ -99,7 +99,7 @@ def evaluate(H, ema_vae, data_valid, preprocess_fn):
 
 
 def write_images(H, ema_vae, viz_batch_original, viz_batch_processed, fname, logprint):
-    zs = [s['z'].cuda() for s in ema_vae.forward_get_latents(viz_batch_processed)]
+    zs = [s['z'].cuda() for s in ema_vae.forward_get_latents(viz_batch_processed)]  # use current model params to generate latents;
     batches = [viz_batch_original.numpy()]
     mb = viz_batch_processed.shape[0]
     lv_points = np.floor(np.linspace(0, 1, H.num_variables_visualize + 2) * len(zs)).astype(int)[1:-1]
@@ -125,7 +125,7 @@ def run_test_eval(H, ema_vae, data_test, preprocess_fn, logprint):
 def main():
     H, logprint = set_up_hyperparams()
     H, data_train, data_valid_or_test, preprocess_fn = set_up_data(H)
-    vae, ema_vae = load_vaes(H, logprint)
+    vae, ema_vae = load_vaes(H, logprint)   # ema_vae maintains the exponential moving average of the params;
     if H.test_eval:
         run_test_eval(H, ema_vae, data_valid_or_test, preprocess_fn, logprint)
     else:

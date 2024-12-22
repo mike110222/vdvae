@@ -148,7 +148,7 @@ class DmolNet(nn.Module):
         super().__init__()
         self.H = H
         self.width = H.width
-        self.out_conv = get_conv(H.width, H.num_mixtures * 10, kernel_size=1, stride=1, padding=0)
+        self.out_conv = get_conv(H.width, H.num_mixtures * 10, kernel_size=1, stride=1, padding=0) #
 
     def nll(self, px_z, x):
         return discretized_mix_logistic_loss(x=x, l=self.forward(px_z), low_bit=self.H.dataset in ['ffhq_256'])
